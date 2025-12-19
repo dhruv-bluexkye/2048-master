@@ -171,14 +171,29 @@ function closeFlutterWindow() {
 
 // Submit score to Flutter backend
 function submitScoreToFlutter(score, timeTaken) {
+	console.log('submitScoreToFlutter called with score:', score, 'timeTaken:', timeTaken);
+	console.log('Checking parameters - poolId:', poolId, 'sessionId:', sessionId, 'authToken:', authToken ? 'exists' : 'null');
+	
 	// Check if required parameters are available
 	if (!poolId || !sessionId || !authToken) {
 		console.log('Flutter parameters not available. Score not submitted.');
+		console.log('Missing: poolId=' + !poolId + ', sessionId=' + !sessionId + ', authToken=' + !authToken);
 		return;
 	}
 	
+	// Get current timer duration for validation
+	var currentTimerDuration = 180; // Default
+	if (window.__GAME_SESSION__ && window.__GAME_SESSION__.timerDuration !== undefined) {
+		currentTimerDuration = parseInt(window.__GAME_SESSION__.timerDuration) || 180;
+	} else if (window.__GAME_SESSION__ && window.__GAME_SESSION__.timer !== undefined) {
+		currentTimerDuration = parseInt(window.__GAME_SESSION__.timer) || 180;
+	} else if (typeof gameTimerDuration !== 'undefined' && gameTimerDuration) {
+		currentTimerDuration = gameTimerDuration;
+	}
+	
 	// Ensure time is at least 1 second and at most timer duration
-	timeTaken = Math.max(1, Math.min(gameTimerDuration, timeTaken));
+	timeTaken = Math.max(1, Math.min(currentTimerDuration, timeTaken));
+	console.log('Time validation - timeTaken:', timeTaken, 'timerDuration:', currentTimerDuration);
 	
 	// Use injected API server URL or default
 	var baseUrl = apiServerUrl || 'https://api.metaninza.net';
@@ -189,6 +204,9 @@ function submitScoreToFlutter(score, timeTaken) {
 		score: score,
 		time: timeTaken
 	};
+	
+	console.log('Submitting score to API:', url);
+	console.log('Request data:', JSON.stringify(data));
 	
 	// Make API request
 	fetch(url, {

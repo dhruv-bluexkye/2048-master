@@ -329,6 +329,10 @@ GameManager.prototype.stopTimer = function () {
 
 // Submit score to Flutter backend
 GameManager.prototype.submitScore = function () {
+  console.log('submitScore called. Score:', this.score, 'TimeLeft:', this.timeLeft);
+  console.log('submitScoreToFlutter function exists:', typeof submitScoreToFlutter === 'function');
+  console.log('Flutter params - poolId:', typeof poolId !== 'undefined' ? poolId : 'undefined', 'sessionId:', typeof sessionId !== 'undefined' ? sessionId : 'undefined', 'authToken:', typeof authToken !== 'undefined' ? (authToken ? 'exists' : 'null') : 'undefined');
+  
   if (typeof submitScoreToFlutter === 'function') {
     // Re-read Flutter timer duration (in case it was injected after GameManager was created)
     var timerDuration = 180; // Default
@@ -357,7 +361,10 @@ GameManager.prototype.submitScore = function () {
       timeTaken = timerDuration;
     }
     
+    console.log('Calling submitScoreToFlutter with score:', this.score, 'timeTaken:', timeTaken);
     // Submit score
     submitScoreToFlutter(this.score, timeTaken);
+  } else {
+    console.error('submitScoreToFlutter function not found!');
   }
 };

@@ -27,21 +27,28 @@ window.requestAnimationFrame(function () {
     
     if (!gameManager) {
       gameManager = new GameManager(4, KeyboardInputManager, HTMLActuator, LocalStorageManager);
+      gameManager.startTimer();
     } else {
       // Always start a new game when Play is clicked
       gameManager.restart();
     }
   }
 
-  // Function to go back to start screen
+  // Function to go back to start screen or close Flutter window
   function goBack() {
-    gameOverScreen.classList.add("hidden");
-    startScreen.classList.remove("hidden");
-    // Hide game elements
-    var hiddenElements = document.querySelectorAll(".start-hidden");
-    hiddenElements.forEach(function(el) {
-      el.classList.add("start-hidden");
-    });
+    // If Flutter integration is available, close the window
+    if (typeof closeFlutterWindow === 'function') {
+      closeFlutterWindow();
+    } else {
+      // Fallback: go back to start screen
+      gameOverScreen.classList.add("hidden");
+      startScreen.classList.remove("hidden");
+      // Hide game elements
+      var hiddenElements = document.querySelectorAll(".start-hidden");
+      hiddenElements.forEach(function(el) {
+        el.classList.add("start-hidden");
+      });
+    }
   }
 
   // Add click event to play button

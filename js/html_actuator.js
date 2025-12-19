@@ -3,12 +3,20 @@ function HTMLActuator() {
   this.scoreContainer   = document.querySelector(".score-container");
   this.bestContainer    = document.querySelector(".best-container");
   this.messageContainer = document.querySelector(".game-message");
+  this.gameOverScreen   = document.querySelector(".game-over-screen");
+  this.finalScore       = document.querySelector(".final-score");
+  this.timerContainer   = document.querySelector(".timer-container");
 
   this.score = 0;
 }
 
 HTMLActuator.prototype.actuate = function (grid, metadata) {
   var self = this;
+
+  // Show game over screen immediately if game is over
+  if (metadata.over) {
+    this.showGameOverScreen(metadata.score);
+  }
 
   window.requestAnimationFrame(function () {
     self.clearContainer(self.tileContainer);
@@ -24,12 +32,12 @@ HTMLActuator.prototype.actuate = function (grid, metadata) {
     self.updateScore(metadata.score);
     self.updateBestScore(metadata.bestScore);
 
-    if (metadata.terminated) {
-      if (metadata.over) {
-        self.message(false); // You lose
-      } else if (metadata.won) {
-        self.message(true); // You win!
-      }
+    if (metadata.over) {
+      self.message(false); // You lose
+      // Screen already shown above, but ensure it's still visible
+      self.showGameOverScreen(metadata.score);
+    } else if (metadata.terminated && metadata.won) {
+      self.message(true); // You win!
     }
 
   });
@@ -38,6 +46,38 @@ HTMLActuator.prototype.actuate = function (grid, metadata) {
 // Continues the game (both restart and keep playing)
 HTMLActuator.prototype.continueGame = function () {
   this.clearMessage();
+  this.hideGameOverScreen();
+};
+
+// Show the game over screen
+HTMLActuator.prototype.showGameOverScreen = function (score) {
+  // Query elements each time to ensure they exist
+  var gameOverScreen = document.querySelector(".game-over-screen");
+  var finalScore = document.querySelector(".final-score");
+  var scoreWrapper = document.querySelector(".score-wrapper");
+  var gameExplanation = document.querySelector(".game-explanation");
+  
+  if (gameOverScreen) {
+    gameOverScreen.classList.remove("hidden");
+    if (finalScore) {
+      finalScore.textContent = score;
+    }
+    // Hide score and instructions when game over screen is shown
+    if (scoreWrapper) {
+      scoreWrapper.classList.add("start-hidden");
+    }
+    if (gameExplanation) {
+      gameExplanation.classList.add("start-hidden");
+    }
+  }
+};
+
+// Hide the game over screen
+HTMLActuator.prototype.hideGameOverScreen = function () {
+  var gameOverScreen = document.querySelector(".game-over-screen");
+  if (gameOverScreen) {
+    gameOverScreen.classList.add("hidden");
+  }
 };
 
 HTMLActuator.prototype.clearContainer = function (container) {
@@ -122,6 +162,18 @@ HTMLActuator.prototype.updateScore = function (score) {
 
 HTMLActuator.prototype.updateBestScore = function (bestScore) {
   this.bestContainer.textContent = bestScore;
+};
+
+HTMLActuator.prototype.updateTimer = function (timeLeft) {
+  if (this.timerContainer) {
+    this.timerContainer.textContent = timeLeft;
+  } else {
+    // Fallback: query element if not cached
+    var timerContainer = document.querySelector(".timer-container");
+    if (timerContainer) {
+      timerContainer.textContent = timeLeft;
+    }
+  }
 };
 
 HTMLActuator.prototype.message = function (won) {

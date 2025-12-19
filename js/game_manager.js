@@ -5,6 +5,10 @@ function GameManager(size, InputManager, Actuator, StorageManager) {
   this.actuator       = new Actuator;
 
   this.startTiles     = 2;
+  // Timer duration will be read dynamically when startTimer() is called
+  this.timeLeft       = 180; // Default, will be updated when timer starts
+  this.timerInterval  = null;
+  this.gameStartTime  = null; // Track when game started for time calculation
 
   this.inputManager.on("move", this.move.bind(this));
   this.inputManager.on("restart", this.restart.bind(this));
@@ -15,9 +19,12 @@ function GameManager(size, InputManager, Actuator, StorageManager) {
 
 // Restart the game
 GameManager.prototype.restart = function () {
+  this.stopTimer();
   this.storageManager.clearGameState();
   this.actuator.continueGame(); // Clear the game won/lost message
+  // Timer duration will be read when startTimer() is called
   this.setup();
+  this.startTimer();
 };
 
 // Keep playing after winning (allows going over 2048)
@@ -49,6 +56,7 @@ GameManager.prototype.setup = function () {
     this.over        = false;
     this.won         = false;
     this.keepPlaying = false;
+    // Timer duration will be set when startTimer() is called, not here
 
     // Add the initial tiles
     this.addStartTiles();
@@ -126,7 +134,13 @@ GameManager.prototype.move = function (direction) {
   // 0: up, 1: right, 2: down, 3: left
   var self = this;
 
-  if (this.isGameTerminated()) return; // Don't do anything if the game's over
+  if (this.isGameTerminated()) {
+    // Ensure game over screen is shown even if game was already over
+    if (this.over) {
+      this.actuate();
+    }
+    return; // Don't do anything if the game's over
+  }
 
   var cell, tile;
 
@@ -178,7 +192,10 @@ GameManager.prototype.move = function (direction) {
     this.addRandomTile();
 
     if (!this.movesAvailable()) {
+      this.stopTimer();
       this.over = true; // Game over!
+      // Submit score when game ends due to no moves
+      this.submitScore();
     }
 
     this.actuate();
@@ -264,4 +281,83 @@ GameManager.prototype.tileMatchesAvailable = function () {
 
 GameManager.prototype.positionsEqual = function (first, second) {
   return first.x === second.x && first.y === second.y;
+};
+
+// Start the timer
+GameManager.prototype.startTimer = function () {
+  var self = this;
+  // Re-read Flutter timer duration when starting (in case it was injected after GameManager was created)
+  // Check window.__GAME_SESSION__ first, then global gameTimerDuration, then default
+  var timerDuration = 180; // Default
+  
+  // First check if window.__GAME_SESSION__ exists and has timerDuration
+  if (window.__GAME_SESSION__ && window.__GAME_SESSION__.timerDuration !== undefined) {
+    timerDuration = parseInt(window.__GAME_SESSION__.timerDuration) || 180;
+  } else if (window.__GAME_SESSION__ && window.__GAME_SESSION__.timer !== undefined) {
+    timerDuration = parseInt(window.__GAME_SESSION__.timer) || 180;
+  } else if (typeof gameTimerDuration !== 'undefined' && gameTimerDuration) {
+    // Fallback to global gameTimerDuration variable
+    timerDuration = gameTimerDuration;
+  }
+  
+  console.log('Starting timer with duration:', timerDuration, 'from', window.__GAME_SESSION__ ? 'window.__GAME_SESSION__' : 'gameTimerDuration');
+  this.timeLeft = timerDuration;
+  this.gameStartTime = Date.now(); // Track when game started
+  this.actuator.updateTimer(this.timeLeft);
+  
+  this.timerInterval = setInterval(function() {
+    self.timeLeft--;
+    self.actuator.updateTimer(self.timeLeft);
+    
+    if (self.timeLeft <= 0) {
+      self.stopTimer();
+      self.over = true;
+      self.actuate();
+      // Submit score when timer runs out
+      self.submitScore();
+    }
+  }, 1000);
+};
+
+// Stop the timer
+GameManager.prototype.stopTimer = function () {
+  if (this.timerInterval) {
+    clearInterval(this.timerInterval);
+    this.timerInterval = null;
+  }
+};
+
+// Submit score to Flutter backend
+GameManager.prototype.submitScore = function () {
+  if (typeof submitScoreToFlutter === 'function') {
+    // Re-read Flutter timer duration (in case it was injected after GameManager was created)
+    var timerDuration = 180; // Default
+    
+    // First check if window.__GAME_SESSION__ exists and has timerDuration
+    if (window.__GAME_SESSION__ && window.__GAME_SESSION__.timerDuration !== undefined) {
+      timerDuration = parseInt(window.__GAME_SESSION__.timerDuration) || 180;
+    } else if (window.__GAME_SESSION__ && window.__GAME_SESSION__.timer !== undefined) {
+      timerDuration = parseInt(window.__GAME_SESSION__.timer) || 180;
+    } else if (typeof gameTimerDuration !== 'undefined' && gameTimerDuration) {
+      // Fallback to global gameTimerDuration variable
+      timerDuration = gameTimerDuration;
+    }
+    
+    // Calculate time taken in seconds
+    // If timer reached 0, time is full timer duration
+    // Otherwise, if game ended early, time is timerDuration - remaining timer
+    var timeTaken = timerDuration; // Default to full timer duration
+    
+    if (this.timeLeft !== undefined && this.timeLeft > 0) {
+      // Game ended early (before timer), calculate time taken
+      timeTaken = timerDuration - this.timeLeft;
+      timeTaken = Math.ceil(timeTaken);
+    } else if (this.timeLeft !== undefined && this.timeLeft <= 0) {
+      // Timer reached 0, full timer duration
+      timeTaken = timerDuration;
+    }
+    
+    // Submit score
+    submitScoreToFlutter(this.score, timeTaken);
+  }
 };

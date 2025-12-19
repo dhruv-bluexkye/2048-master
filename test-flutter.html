@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+	<title>2048 - Flutter Integration Test</title>
+	<meta charset="utf-8">
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			padding: 20px;
+			background: #f5f5f5;
+		}
+		.test-panel {
+			background: white;
+			padding: 20px;
+			border-radius: 8px;
+			margin-bottom: 20px;
+			box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+		}
+		.test-panel h2 {
+			margin-top: 0;
+		}
+		.test-panel input, .test-panel button {
+			margin: 5px;
+			padding: 8px;
+		}
+		.test-panel input {
+			width: 300px;
+		}
+		.test-panel button {
+			background: #3498db;
+			color: white;
+			border: none;
+			padding: 10px 20px;
+			border-radius: 4px;
+			cursor: pointer;
+		}
+		.test-panel button:hover {
+			background: #2980b9;
+		}
+		.console-log {
+			background: #2c3e50;
+			color: #ecf0f1;
+			padding: 15px;
+			border-radius: 4px;
+			font-family: monospace;
+			font-size: 12px;
+			max-height: 200px;
+			overflow-y: auto;
+			margin-top: 10px;
+		}
+		iframe {
+			width: 100%;
+			height: 600px;
+			border: 2px solid #3498db;
+			border-radius: 4px;
+		}
+	</style>
+</head>
+<body>
+	<div class="test-panel">
+		<h2>Flutter Integration Test Panel</h2>
+		<p>This page simulates the Flutter InAppWebView environment for testing.</p>
+		
+		<div>
+			<label>Pool ID:</label><br>
+			<input type="text" id="poolId" value="test-pool-123" placeholder="Enter pool ID">
+		</div>
+		
+		<div>
+			<label>Session ID:</label><br>
+			<input type="text" id="sessionId" value="test-session-456" placeholder="Enter session ID">
+		</div>
+		
+		<div>
+			<label>Auth Token:</label><br>
+			<input type="text" id="authToken" value="test-token-789" placeholder="Enter auth token">
+		</div>
+		
+		<div>
+			<label>Timer Duration (seconds):</label><br>
+			<input type="number" id="timerDuration" value="180" min="1" max="300" placeholder="Timer duration">
+		</div>
+		
+		<div>
+			<label>API Server URL:</label><br>
+			<input type="text" id="apiServerUrl" value="https://api.metaninza.net" placeholder="API server URL">
+		</div>
+		
+		<button onclick="loadGame()">Load Game with Session</button>
+		<button onclick="loadGameDebug()">Load Game (Debug Mode)</button>
+		<button onclick="clearLogs()">Clear Logs</button>
+		<button onclick="mockApiSuccess()">Mock API: Success</button>
+		<button onclick="mockApiError()">Mock API: Error</button>
+		
+		<div class="console-log" id="consoleLog">
+			<div>Console logs will appear here...</div>
+		</div>
+	</div>
+	
+	<iframe id="gameFrame" src=""></iframe>
+	
+	<script>
+		// Intercept console.log to show in our panel
+		const originalLog = console.log;
+		const originalError = console.error;
+		const originalWarn = console.warn;
+		
+		function addLog(message, type = 'log') {
+			const logDiv = document.getElementById('consoleLog');
+			const time = new Date().toLocaleTimeString();
+			const color = type === 'error' ? '#e74c3c' : type === 'warn' ? '#f39c12' : '#2ecc71';
+			logDiv.innerHTML += `<div style="color: ${color}">[${time}] ${message}</div>`;
+			logDiv.scrollTop = logDiv.scrollHeight;
+		}
+		
+		console.log = function(...args) {
+			originalLog.apply(console, args);
+			addLog(args.join(' '), 'log');
+		};
+		
+		console.error = function(...args) {
+			originalError.apply(console, args);
+			addLog(args.join(' '), 'error');
+		};
+		
+		console.warn = function(...args) {
+			originalWarn.apply(console, args);
+			addLog(args.join(' '), 'warn');
+		};
+		
+		// Store mock API settings
+		let mockApiResponse = { success: true, status: 200 };
+		
+		function loadGame() {
+			const poolId = document.getElementById('poolId').value;
+			const sessionId = document.getElementById('sessionId').value;
+			const authToken = document.getElementById('authToken').value;
+			const timerDuration = parseInt(document.getElementById('timerDuration').value) || 180;
+			const apiServerUrl = document.getElementById('apiServerUrl').value;
+			
+			const iframe = document.getElementById('gameFrame');
+			iframe.src = 'index.html';
+			
+			// Wait for iframe to load, then inject session
+			iframe.onload = function() {
+				const iframeWindow = iframe.contentWindow;
+				
+				// Mock fetch API to intercept score submissions
+				setupMockFetch(iframeWindow);
+				
+				// Wait a bit for the game to initialize, then inject session
+				setTimeout(function() {
+					const js = `
+						window.__GAME_SESSION__ = {
+							poolId: "${poolId}",
+							sessionId: "${sessionId}",
+							token: "${authToken}",
+							timerDuration: ${timerDuration},
+							apiServerUrl: "${apiServerUrl}",
+							expiresAt: Date.now() + 1800000
+						};
+						console.log('Session injected:', window.__GAME_SESSION__);
+						
+						// Re-initialize Flutter params if function exists
+						if (typeof initFlutterParams === 'function') {
+							initFlutterParams();
+						}
+					`;
+					
+					try {
+						iframeWindow.eval(js);
+						addLog('Session injected successfully', 'log');
+						addLog('Pool ID: ' + poolId + ', Session ID: ' + sessionId, 'log');
+						addLog('Timer Duration: ' + timerDuration + 's', 'log');
+					} catch (e) {
+						addLog('Error injecting session: ' + e.message, 'error');
+					}
+				}, 500); // Wait 500ms for game to initialize
+			};
+		}
+		
+		function setupMockFetch(iframeWindow) {
+			// Store original fetch
+			const originalFetch = iframeWindow.fetch;
+			
+			// Override fetch to intercept API calls
+			iframeWindow.fetch = function(url, options) {
+				// Check if this is a score submission API call
+				if (url && url.includes('/submit-score')) {
+					addLog('Intercepted score submission API call', 'log');
+					addLog('URL: ' + url, 'log');
+					
+					if (options && options.body) {
+						try {
+							const data = JSON.parse(options.body);
+							addLog('Score: ' + data.score + ', Time: ' + data.time + 's', 'log');
+						} catch (e) {
+							addLog('Could not parse request body', 'warn');
+						}
+					}
+					
+					// Return mock response based on mockApiResponse setting
+					return new Promise(function(resolve) {
+						setTimeout(function() {
+							if (mockApiResponse.success) {
+								const response = new Response(JSON.stringify({
+									success: true,
+									message: 'Score submitted successfully',
+									data: {
+										score: JSON.parse(options.body).score,
+										time: JSON.parse(options.body).time,
+										timestamp: new Date().toISOString()
+									}
+								}), {
+									status: mockApiResponse.status || 200,
+									headers: { 'Content-Type': 'application/json' }
+								});
+								addLog('Mock API: Returning success response', 'log');
+								resolve(response);
+							} else {
+								const response = new Response(JSON.stringify({
+									error: 'Validation error',
+									message: 'Invalid session',
+									status: mockApiResponse.status || 400
+								}), {
+									status: mockApiResponse.status || 400,
+									headers: { 'Content-Type': 'application/json' }
+								});
+								addLog('Mock API: Returning error response', 'error');
+								resolve(response);
+							}
+						}, 300); // Simulate network delay
+					});
+				}
+				
+				// For other fetch calls, use original fetch
+				return originalFetch.apply(this, arguments);
+			};
+		}
+		
+		function loadGameDebug() {
+			const poolId = document.getElementById('poolId').value;
+			const sessionId = document.getElementById('sessionId').value;
+			const authToken = document.getElementById('authToken').value;
+			const timerDuration = parseInt(document.getElementById('timerDuration').value) || 180;
+			const apiServerUrl = document.getElementById('apiServerUrl').value;
+			
+			// Load with debug mode and URL parameters
+			const iframe = document.getElementById('gameFrame');
+			const url = `index.html?debug=true&poolId=${poolId}&sessionId=${sessionId}&authToken=${authToken}&timer=${timerDuration}&apiServerUrl=${encodeURIComponent(apiServerUrl)}`;
+			iframe.src = url;
+			
+			// Setup mock fetch for debug mode too
+			iframe.onload = function() {
+				setTimeout(function() {
+					setupMockFetch(iframe.contentWindow);
+				}, 500);
+			};
+			
+			addLog('Loading game in debug mode with URL parameters', 'log');
+		}
+		
+		function mockApiSuccess() {
+			mockApiResponse = { success: true, status: 200 };
+			addLog('Mock API set to: Success (200)', 'log');
+		}
+		
+		function mockApiError() {
+			mockApiResponse = { success: false, status: 400 };
+			addLog('Mock API set to: Error (400)', 'warn');
+		}
+		
+		function clearLogs() {
+			document.getElementById('consoleLog').innerHTML = '<div>Console logs cleared...</div>';
+		}
+		
+		// Handle messages from iframe (score submission results, close game, etc.)
+		window.addEventListener('message', function(event) {
+			// Handle score submission success
+			if (event.data && event.data.type === 'scoreSubmitSuccess') {
+				const data = event.data.data;
+				addLog('✓ Score submission SUCCESS', 'log');
+				addLog('Status: ' + data.status, 'log');
+				if (data.data) {
+					addLog('Response: ' + JSON.stringify(data.data), 'log');
+				}
+			}
+			
+			// Handle score submission error
+			if (event.data && event.data.type === 'scoreSubmitError') {
+				const data = event.data.data;
+				addLog('✗ Score submission ERROR', 'error');
+				addLog('Status: ' + data.status, 'error');
+				if (data.error) {
+					addLog('Error: ' + JSON.stringify(data.error), 'error');
+				}
+			}
+			
+			// Handle close game request
+			if (event.data && event.data.type === 'closeGame') {
+				addLog('Close game requested from iframe', 'warn');
+				// In a real Flutter app, this would close the window
+				// For testing, we'll just log it
+			}
+			
+			// Handle other Flutter messages
+			if (event.data && event.data.type && !event.data.type.includes('scoreSubmit') && event.data.type !== 'closeGame') {
+				addLog('Flutter message: ' + event.data.type, 'log');
+				if (event.data.data) {
+					addLog('Data: ' + JSON.stringify(event.data.data), 'log');
+				}
+			}
+		});
+		
+		// Auto-load on page load
+		window.onload = function() {
+			addLog('Test panel ready. Click "Load Game with Session" to start testing.', 'log');
+		};
+	</script>
+</body>
+</html>
+

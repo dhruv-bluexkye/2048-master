@@ -330,40 +330,10 @@ GameManager.prototype.stopTimer = function () {
 // Submit score to Flutter backend
 GameManager.prototype.submitScore = function () {
   console.log('submitScore called. Score:', this.score, 'TimeLeft:', this.timeLeft);
-  console.log('submitScoreToFlutter function exists:', typeof submitScoreToFlutter === 'function');
-  console.log('Flutter params - poolId:', typeof poolId !== 'undefined' ? poolId : 'undefined', 'sessionId:', typeof sessionId !== 'undefined' ? sessionId : 'undefined', 'authToken:', typeof authToken !== 'undefined' ? (authToken ? 'exists' : 'null') : 'undefined');
   
   if (typeof submitScoreToFlutter === 'function') {
-    // Re-read Flutter timer duration (in case it was injected after GameManager was created)
-    var timerDuration = 180; // Default
-    
-    // First check if window.__GAME_SESSION__ exists and has timerDuration
-    if (window.__GAME_SESSION__ && window.__GAME_SESSION__.timerDuration !== undefined) {
-      timerDuration = parseInt(window.__GAME_SESSION__.timerDuration) || 180;
-    } else if (window.__GAME_SESSION__ && window.__GAME_SESSION__.timer !== undefined) {
-      timerDuration = parseInt(window.__GAME_SESSION__.timer) || 180;
-    } else if (typeof gameTimerDuration !== 'undefined' && gameTimerDuration) {
-      // Fallback to global gameTimerDuration variable
-      timerDuration = gameTimerDuration;
-    }
-    
-    // Calculate time taken in seconds
-    // If timer reached 0, time is full timer duration
-    // Otherwise, if game ended early, time is timerDuration - remaining timer
-    var timeTaken = timerDuration; // Default to full timer duration
-    
-    if (this.timeLeft !== undefined && this.timeLeft > 0) {
-      // Game ended early (before timer), calculate time taken
-      timeTaken = timerDuration - this.timeLeft;
-      timeTaken = Math.ceil(timeTaken);
-    } else if (this.timeLeft !== undefined && this.timeLeft <= 0) {
-      // Timer reached 0, full timer duration
-      timeTaken = timerDuration;
-    }
-    
-    console.log('Calling submitScoreToFlutter with score:', this.score, 'timeTaken:', timeTaken);
-    // Submit score
-    submitScoreToFlutter(this.score, timeTaken);
+    // Submit score (function will get score and time from gameManager)
+    submitScoreToFlutter();
   } else {
     console.error('submitScoreToFlutter function not found!');
   }

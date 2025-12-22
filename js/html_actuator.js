@@ -54,8 +54,10 @@ HTMLActuator.prototype.showGameOverScreen = function (score) {
   // Query elements each time to ensure they exist
   var gameOverScreen = document.querySelector(".game-over-screen");
   var finalScore = document.querySelector(".final-score");
+  var gameOverTitle = document.querySelector(".game-over-title");
   var scoreWrapper = document.querySelector(".score-wrapper");
   var gameExplanation = document.querySelector(".game-explanation");
+  var backButton = document.querySelector(".back-button");
   
   if (gameOverScreen) {
     gameOverScreen.classList.remove("hidden");
@@ -68,6 +70,48 @@ HTMLActuator.prototype.showGameOverScreen = function (score) {
     }
     if (gameExplanation) {
       gameExplanation.classList.add("start-hidden");
+    }
+    
+    // Check if score submission is already complete
+    var submissionComplete = (typeof scoreSubmissionComplete !== 'undefined' && scoreSubmissionComplete);
+    var isSubmitting = (typeof scoreSubmitting !== 'undefined' && scoreSubmitting);
+    
+    // Update game over message based on session state and submission status
+    if (submissionComplete) {
+      // Submission already complete, show GAME OVER
+      if (gameOverTitle) {
+        gameOverTitle.textContent = 'GAME OVER';
+      }
+      if (backButton) {
+        backButton.style.display = '';
+      }
+    } else if (typeof poolId !== 'undefined' && poolId && typeof sessionId !== 'undefined' && sessionId && typeof authToken !== 'undefined' && authToken && !isSubmitting) {
+      // Has session but not submitting yet - will show submitting message
+      // Only set if not already set to avoid overwriting updates
+      if (gameOverTitle && gameOverTitle.textContent !== 'Submitting score...' && gameOverTitle.textContent !== 'GAME OVER') {
+        gameOverTitle.textContent = 'Submitting score...';
+      }
+      // Hide back button initially (will show after score submission)
+      if (backButton) {
+        backButton.style.display = 'none';
+      }
+    } else if (isSubmitting) {
+      // Currently submitting - keep the message as is or set to submitting
+      if (gameOverTitle && gameOverTitle.textContent !== 'Submitting score...') {
+        gameOverTitle.textContent = 'Submitting score...';
+      }
+      if (backButton) {
+        backButton.style.display = 'none';
+      }
+    } else {
+      // No session or other case - show GAME OVER
+      if (gameOverTitle) {
+        gameOverTitle.textContent = 'GAME OVER';
+      }
+      // If no session, show back button immediately
+      if (backButton) {
+        backButton.style.display = '';
+      }
     }
   }
 };
@@ -188,4 +232,94 @@ HTMLActuator.prototype.clearMessage = function () {
   // IE only takes one value to remove at a time.
   this.messageContainer.classList.remove("game-won");
   this.messageContainer.classList.remove("game-over");
+};
+
+// Update game over message (global function for Flutter integration)
+window.updateGameOverMessage = function(text) {
+  console.log('updateGameOverMessage called with:', text);
+  var gameOverTitle = document.querySelector(".game-over-title");
+  if (gameOverTitle) {
+    gameOverTitle.textContent = text;
+    console.log('Game over title updated to:', text);
+  } else {
+    console.warn('Game over title element not found!');
+    // Try again after a short delay in case element isn't ready yet
+    setTimeout(function() {
+      var retryElement = document.querySelector(".game-over-title");
+      if (retryElement) {
+        retryElement.textContent = text;
+        console.log('Game over title updated on retry to:', text);
+      }
+    }, 100);
+  }
+};
+
+// Polling function to check and update game over screen based on submission state
+window.checkAndUpdateGameOverScreen = function() {
+  var gameOverScreen = document.querySelector(".game-over-screen");
+  if (!gameOverScreen || gameOverScreen.classList.contains("hidden")) {
+    return; // Game over screen not visible
+  }
+  
+  var gameOverTitle = document.querySelector(".game-over-title");
+  var backButton = document.querySelector(".back-button");
+  
+  // Check submission state
+  var submissionComplete = (typeof scoreSubmissionComplete !== 'undefined' && scoreSubmissionComplete);
+  var isSubmitting = (typeof scoreSubmitting !== 'undefined' && scoreSubmitting);
+  
+  if (submissionComplete && gameOverTitle && gameOverTitle.textContent === 'Submitting score...') {
+    // Submission complete but still showing submitting - update it
+    gameOverTitle.textContent = 'GAME OVER';
+    console.log('Polling: Updated game over message to GAME OVER');
+    
+    if (backButton) {
+      backButton.style.display = '';
+      console.log('Polling: Back button shown');
+    }
+  } else if (!isSubmitting && !submissionComplete && gameOverTitle && gameOverTitle.textContent === 'Submitting score...') {
+    // Not submitting and not complete but still showing submitting - might be stuck
+    // Check if we have session params
+    var hasSession = (typeof poolId !== 'undefined' && poolId && typeof sessionId !== 'undefined' && sessionId && typeof authToken !== 'undefined' && authToken);
+    if (!hasSession) {
+      // No session, should show GAME OVER
+      gameOverTitle.textContent = 'GAME OVER';
+      if (backButton) {
+        backButton.style.display = '';
+      }
+    }
+  }
+};
+
+// Start polling when game over screen is shown
+if (typeof setInterval !== 'undefined') {
+  setInterval(function() {
+    if (typeof checkAndUpdateGameOverScreen === 'function') {
+      checkAndUpdateGameOverScreen();
+    }
+  }, 200); // Check every 200ms
+}
+
+// Show back button (global function for Flutter integration)
+window.showBackButton = function() {
+  var backButton = document.querySelector(".back-button");
+  if (backButton) {
+    backButton.style.display = '';
+    // Fade in effect if supported
+    if (backButton.style.transition !== undefined) {
+      backButton.style.opacity = '0';
+      setTimeout(function() {
+        backButton.style.transition = 'opacity 0.3s';
+        backButton.style.opacity = '1';
+      }, 10);
+    }
+  }
+};
+
+// Hide back button (global function for Flutter integration)
+window.hideBackButton = function() {
+  var backButton = document.querySelector(".back-button");
+  if (backButton) {
+    backButton.style.display = 'none';
+  }
 };
